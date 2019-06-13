@@ -3,7 +3,10 @@ import PropTypes from 'prop-types';
 import { shareApiList } from './constants';
 import EventEmitter from 'emit-lite';
 import WechatAPIContext from './WechatAPIContext';
-import { isWechat, debounce, Component } from './utils';
+import { isWechat, debounce, Component, getMobileOperatingSystem } from './utils';
+import {addQueryString} from "../../utils/QueryString";
+
+
 
 export default class WechatAPIProvider extends Component {
 	static propTypes = {
@@ -45,6 +48,9 @@ export default class WechatAPIProvider extends Component {
 		const { location, jsApiList } = this.props;
 
 		/* istanbul ignore next */
+		// alert(prevProps.location)
+		// alert(location)
+
 		if (prevProps.location !== location) {
 			this.config(jsApiList, this.updateShareData);
 		}
@@ -56,6 +62,30 @@ export default class WechatAPIProvider extends Component {
 			this.updateShareData(shareData);
 		});
 	}
+
+	getAgentId = ()=>{
+
+		var agentId = null;
+
+		//优先本人做上级达人
+		let userString = localStorage.getItem("user");
+		if (userString) {
+			let user = JSON.parse(userString)
+			if (user && user.agentLevel > 0) {
+				agentId = user.id
+			}
+		}
+		if (agentId) return agentId;
+
+		//其次选择本次分享给我的人做达人
+		agentId = sessionStorage.getItem("agent");
+		if (agentId) return agentId;
+
+		//再次选择本人的上级做达人
+		agentId = localStorage.getItem("agent")
+
+		return agentId;
+    }
 
 	config = debounce((jsApiList, callback) => {
 		const {
@@ -84,17 +114,42 @@ export default class WechatAPIProvider extends Component {
 			return;
 		}
 
-		const maybeGetConfigPromise = getConfig({
-			url: window.location.href.replace(/#.*/, ''),
-		});
+		let url = window.location.href.replace(/#.*/, '');
+		let isIOS = getMobileOperatingSystem() == "iOS";
+		if (isIOS) {
+			let landingPage = sessionStorage.getItem("landingPage");
+			let wechatConfig = sessionStorage.getItem("wechatConfig");
 
-		//这里判断一下是否iOS
-		// 如果是iOS，只做一次getConfig，第一次成功了就存到sessionStorage里面
-		// 以后每次都从sessionStorage里面拿config直接做wx.config
-		Promise.resolve(maybeGetConfigPromise)
-			.then((config) => {
+			if (!landingPage || !wechatConfig) {
+
+				landingPage = url;
+				sessionStorage.setItem("landingPage", landingPage);
+
+				getConfig({
+					url: url
+				}).then((response) => {
+					if (response && response.data)  {
+						let config = response.data
+
+						sessionStorage.setItem("wechatConfig", JSON.stringify(config));
+
+						const apiList = [...jsApiList];
+						this._updateShareApiList(apiList);
+						wx.config({
+							debug,
+							jsApiList: apiList,
+							...config,
+						});
+						wx.ready(() => done(apiList));
+						wx.error((err) => emitter.emit('error', err));
+					}
+				}).catch(onGetConfigError);
+			} else {
+
+				let config = JSON.parse(wechatConfig)
 				const apiList = [...jsApiList];
 				this._updateShareApiList(apiList);
+
 				wx.config({
 					debug,
 					jsApiList: apiList,
@@ -102,8 +157,27 @@ export default class WechatAPIProvider extends Component {
 				});
 				wx.ready(() => done(apiList));
 				wx.error((err) => emitter.emit('error', err));
-			})
-			.catch(onGetConfigError);
+			}
+		} else {
+			getConfig({
+				url: url
+			}).then((response) => {
+				if (response && response.data)  {
+					let config = response.data
+
+					const apiList = [...jsApiList];
+					this._updateShareApiList(apiList);
+					wx.config({
+						debug,
+						jsApiList: apiList,
+						...config,
+					});
+					wx.ready(() => done(apiList));
+					wx.error((err) => emitter.emit('error', err));
+				}
+			}).catch(onGetConfigError);
+		}
+
 	}, 200);
 
 	_updateShareApiList = (apiList) => {
@@ -117,7 +191,12 @@ export default class WechatAPIProvider extends Component {
 			const val = data[key];
 			if (typeof val === 'function') {
 				data[key] = val();
-				//这里我给每个分享链接加个自己的参数，放在query-string里面
+				if (key === 'link') {
+					let agentId = this.getAgentId()
+					if (agentId) {
+						data[key] = addQueryString(data[key], 'a', agentId)
+					}
+				}
 			}
 		});
 		this.shareApiList.forEach((shareType) => wx[shareType](data));
@@ -138,6 +217,15 @@ export default class WechatAPIProvider extends Component {
 			undocumented_isWechat,
 			...other
 		} = this.props;
+
+
+		const path = window.location.pathname
+
+		// Regex taken from: https://github.com/pillarjs/path-to-regexp/blob/master/index.js#L202
+		const escapedPath = path && path.replace(/([.+*?=^!:${}()[\]|/\\])/g, "\\$1");
+
+		const isMatch = escapedPath === path;
+
 		return (
 			<WechatAPIContext.Provider value={this.wechatAPIContext}>
 				{Children.only(cloneElement(children, other))}

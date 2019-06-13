@@ -2,7 +2,15 @@ import React from 'react';
 
 const { userAgent } = window.navigator;
 
-export const isWechat = /micromessenger/i.test(userAgent);
+// 增加开发环境下的调试支持
+var checkAgent = /micromessenger/i.test(userAgent);
+
+if (process.env.NODE_ENV === 'development')
+{
+	checkAgent = true;
+}
+
+export const isWechat = checkAgent
 
 export function debounce(fn, delay) {
 	let t0;

@@ -50,7 +50,7 @@ export default class WechatAPI extends Component {
 	renderChildren = (wechatAPI) => {
 		invariant(
 			wechatAPI,
-			'You should not use <AppTitle> outside <WechatAPIProvider>',
+			'You should not use <WechatAPI> outside <WechatAPIProvider>',
 		);
 		if (!this.wechatAPI) this.setup(wechatAPI);
 		return Children.only(this.props.children);

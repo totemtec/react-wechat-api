@@ -4,5 +4,5 @@ export const shareApiList = [
 	'onMenuShareTimeline',
 	'onMenuShareAppMessage',
 	'onMenuShareQQ',
-	'onMenuShareQZone',
+	'onMenuShareQZone'
 ];

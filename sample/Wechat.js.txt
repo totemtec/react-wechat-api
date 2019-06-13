@@ -1,0 +1,136 @@
+import React from "react";
+import { Route } from "react-router-dom";
+import wx from "weixin-js-sdk";
+import { WechatAPIProvider } from "./react-wechat-api";
+import { Toast } from 'react-weui'
+import axios from 'axios'
+import {authorizedLogin} from "./api";
+import queryString from "query-string";
+import {addQueryString} from "../utils/QueryString";
+
+const getConfig = ({ url }) =>{return axios(`${process.env.REACT_APP_API_BASE_URL}weixin/config?url=${url}`);}
+/* should return an object like {
+  appId: "wx05d8cb9deee3c05c",
+  nonceStr: "nw0y6jnq1ie",
+  signature: "e50d96cb73c09ba1e5848456d1ae90ec1b7ccf43",
+  timestamp: 1541346529448
+} */
+
+const defaultShareData = {
+    title: "分享标题",
+    desc: "吃喝玩乐！超值爆品！分享更有返利哦～～",
+    link: () => window.location.href, // will return latest URL dynamically
+    imgUrl: `${window.location.origin}/icon.jpg`
+};
+
+const defaultJsApiList = [
+    'updateAppMessageShareData',
+    'updateTimelineShareData',
+    "onMenuShareTimeline",
+    "onMenuShareAppMessage",
+    'hideOptionMenu'
+];
+
+const authorize = ()=>{
+    let url = window.location.href
+    let redirect = encodeURI(url);
+    let appId = process.env.REACT_APP_WECHAT_APP_ID;
+    let authorizeUrl = "https://open.weixin.qq.com/connect/oauth2/authorize?appid=" + appId
+        + "&redirect_uri=" + redirect + "&response_type=code&scope=snsapi_userinfo&state=authorized#wechat_redirect"
+    window.location.assign(authorizeUrl);
+};
+
+
+class Wechat extends React.Component {
+    constructor(props){
+        super(props)
+    }
+
+    componentWillMount () {
+
+        const development = (process.env.NODE_ENV === 'development');
+        if (development){
+            // 不要跳转微信授权了
+            return;
+        }
+
+        let token = localStorage.getItem("token")
+        let user = localStorage.getItem("user");
+
+        let params = queryString.parse(window.location.search)
+        if (params.a) {
+            sessionStorage.setItem("agent", params.a)
+        }
+
+        if (token && user) {
+            //用户已登录
+            this.setState({
+                user: user,
+                token: token
+            })
+        }
+        else {
+
+            if (params.code && params.state) {
+
+                //登录成功后，达人拉新，只要你不变成达人，以后他都是你的上级
+                let agentId = localStorage.getItem("agent")
+                if (params.a && !agentId) {
+                    localStorage.setItem("agent", params.a)
+                }
+
+                //授权成功，获取用户信息
+                this.authorizeSuccess(params.code)
+            } else {
+                authorize();
+            }
+        }
+    }
+
+    authorizeSuccess(code) {
+
+        this.setState({isLoading: true})
+
+        authorizedLogin(code).then(response => {
+            console.log(response)
+            if (response && response.data.code === 1 && response.data.token) {
+                localStorage.setItem("user", JSON.stringify(response.data.data))
+                localStorage.setItem("token", response.data.token)
+                this.setState({
+                    user: response.data.data,
+                    token: response.data.token,
+                    isLoading: false
+                })
+            }
+        })
+    }
+
+    render() {
+        const {location, ...props} = this.props;
+
+        const development = (process.env.NODE_ENV === 'development');
+
+        return (
+
+            development || ( this.state.token && this.state.user ) ?
+                (
+                    <Route>
+                        {({ location }) => (
+                            <WechatAPIProvider
+                                {...props}
+                                location={location} // <-- `location` is required
+                                wx={wx} // <-- `wx` is required
+                                getConfig={getConfig}
+                                jsApiList={defaultJsApiList}
+                                shareData={defaultShareData}
+                                debug={false}
+                            />
+                        )}
+                    </Route>
+                )
+             : <Toast icon="loading" show={this.state.isLoading}>加载中...</Toast>
+        );
+    }
+
+}
+export default Wechat
