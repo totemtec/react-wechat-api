@@ -115,68 +115,33 @@ export default class WechatAPIProvider extends Component {
 		}
 
 		let url = window.location.href.replace(/#.*/, '');
-		let isIOS = getMobileOperatingSystem() == "iOS";
-		if (isIOS) {
-			let landingPage = sessionStorage.getItem("landingPage");
-			let wechatConfig = sessionStorage.getItem("wechatConfig");
+        let isIOS = getMobileOperatingSystem() == "iOS";
+        if (isIOS) {
+        	let landingPage = sessionStorage.getItem("landingPage");
+        	if (landingPage) {
+        		url = landingPage;
+        	} else {
+        		sessionStorage.setItem("landingPage", url);
+        	}
+        }
 
-			if (!landingPage || !wechatConfig) {
+        getConfig({
+        	url: url
+        }).then((response) => {
+        	if (response && response.data)  {
+        		let config = response.data
 
-				landingPage = url;
-				sessionStorage.setItem("landingPage", landingPage);
-
-				getConfig({
-					url: url
-				}).then((response) => {
-					if (response && response.data)  {
-						let config = response.data
-
-						sessionStorage.setItem("wechatConfig", JSON.stringify(config));
-
-						const apiList = [...jsApiList];
-						this._updateShareApiList(apiList);
-						wx.config({
-							debug,
-							jsApiList: apiList,
-							...config,
-						});
-						wx.ready(() => done(apiList));
-						wx.error((err) => emitter.emit('error', err));
-					}
-				}).catch(onGetConfigError);
-			} else {
-
-				let config = JSON.parse(wechatConfig)
-				const apiList = [...jsApiList];
-				this._updateShareApiList(apiList);
-
-				wx.config({
-					debug,
-					jsApiList: apiList,
-					...config,
-				});
-				wx.ready(() => done(apiList));
-				wx.error((err) => emitter.emit('error', err));
-			}
-		} else {
-			getConfig({
-				url: url
-			}).then((response) => {
-				if (response && response.data)  {
-					let config = response.data
-
-					const apiList = [...jsApiList];
-					this._updateShareApiList(apiList);
-					wx.config({
-						debug,
-						jsApiList: apiList,
-						...config,
-					});
-					wx.ready(() => done(apiList));
-					wx.error((err) => emitter.emit('error', err));
-				}
-			}).catch(onGetConfigError);
-		}
+        		const apiList = [...jsApiList];
+        		this._updateShareApiList(apiList);
+        		wx.config({
+        			debug,
+        			jsApiList: apiList,
+        			...config,
+        		});
+        		wx.ready(() => done(apiList));
+        		wx.error((err) => emitter.emit('error', err));
+        	}
+        }).catch(onGetConfigError);
 
 	}, 200);
 
